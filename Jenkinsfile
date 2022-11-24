@@ -10,7 +10,6 @@ pipeline {
             steps {
                 script {
                 env.STAGE='Paso 1: Compliar'
-                sh 'mvn --version'
                 sh "echo 'Compile Code!'"
                 // Run Maven on a Unix agent.
                 sh "./mvnw clean compile -e"
