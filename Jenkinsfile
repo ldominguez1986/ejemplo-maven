@@ -61,14 +61,6 @@ pipeline {
                    sh 'echo "Testins stage && Slack"'
                 }
             }
-			post{
-				success{
-					slackSend color: 'good', message: "[Luis Dominguez] [${JOB_NAME}] [${BUILD_TAG}] Ejecucion Exitosa", teamDomain: 'devopsusach20-lzc3526', tokenCredentialId: 'token-slack'
-				}
-				failure{
-					slackSend color: 'danger', message: "[Luis Dominguez] [${env.JOB_NAME}] [${BUILD_TAG}] Ejecucion fallida en stage [${env.STAGE}]", teamDomain: 'devopsusach20-lzc3526', tokenCredentialId: 'token-slack'
-				}
-			}
         }
     }
     post {
