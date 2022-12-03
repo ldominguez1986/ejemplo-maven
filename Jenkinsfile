@@ -9,9 +9,10 @@ withEnv(['channel=D0457H2086Q','DB_ENGINE=sqlite']) {
     try{
 
         if (env.BRANCH_NAME =~ ".*release/.*" || env.BRANCH_NAME =~ ".*feature/.*") {
-            stage("Paso 1: Compliar"){
+            stage("Paso 1: Compilar"){
                 node {
-                    sh "echo 'Compile Code! oriverhu'"
+                    sh "git brancha -a"
+                    sh "echo 'Compile Code! ldominguez'"
                     sh "./mvnw clean compile -e"
                 }
             }
