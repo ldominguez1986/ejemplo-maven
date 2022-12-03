@@ -1,131 +1,98 @@
-#!groovy
-withEnv(['channel=D0457H2086Q','DB_ENGINE=sqlite']) {
-    stage("Intro"){
-            node {
-                sh "echo 'Hola'"
-            }
+import groovy.json.JsonSlurperClassic
+
+def jsonParse(def json) {
+    new groovy.json.JsonSlurperClassic().parseText(json)
+}
+pipeline {
+    agent any
+    environment {
+        channel='D0457H2086Q'
+        NEXUS_PASSWORD=credentials('nexus-password')
     }
-
-    try{
-
-        if (env.BRANCH_NAME =~ ".*release/.*" || env.BRANCH_NAME =~ ".*feature/.*") {
-            stage("Paso 1: Compilar"){
-                node {
-                    sh "git branch -a"
-                    sh "echo 'Compile Code! ldominguez'"
-                    sh "./mvnw clean compile -e"
-                }
-            }
-            stage("Paso 2: Testear"){
-                node {
-                    script {
-                        sh "echo 'Test Code!'"
-                        // Run Maven on a Unix agent.
-                        sh "./mvnw clean test -e"
-                    }
-                }
-            }
-            stage("Paso 3: Build .Jar"){
-                node {
-                    script {
-                        sh "echo 'Build .Jar!'"
-                        // Run Maven on a Unix agent.
-                        sh "./mvnw  clean package -e"
-                    }
-                }
-            }
-            stage("Paso 4: Análisis SonarQube"){
-                node {
-                    withSonarQubeEnv('sonarqube') {
-                        sh "echo 'Calling sonar Service in another docker container!'"
-                        // Run Maven on a Unix agent to execute Sonar.
-                        // sh './mvnw clean verify sonar:sonar -Dsonar.projectKey=ms-iclab-grupo2 -Dsonar.projectName=ms-iclab-grupo2 -Dsonar.java.binaries=build'
-                        sh './mvnw clean verify sonar:sonar -Dsonar.projectKey=custom-project-key -Dsonar.projectName=custom-project-key -Dsonar.java.binaries=build'
-                    }
-                }
-            }
-            def BRANCH = "${env.BRANCH_NAME.split("/")[1]}"
-            def BRANCH_TYPE = "${env.BRANCH_NAME.split("/")[0]}"
-
-            stage("Paso 5: Merge $BRANCH_TYPE"){
-                node {
-                    sh "'git flow $BRANCH_TYPE finish $BRANCH'"
-                }
-            }
-
-            stage("Paso 6: Mensaje slack"){
-                node {
-                    slackSend (color: 'good', channel: "${env.channel}", message: "[grupo2] [${env.JOB_NAME}] [${BUILD_NUMBER}] Integracion Exitosa [${env.STAGE}]", teamDomain: 'devopsusach20-lzc3526', tokenCredentialId: 'token-slack')
+    stages {
+        stage("Paso 1: Compilar"){
+            steps {
+                script {
+                env.STAGE='Paso 1: Compilar'
+                sh "echo 'Compile Code!'"
+                // Run Maven on a Unix agent.
+                sh "./mvnw clean compile -e"
                 }
             }
         }
-
-
-        if (env.BRANCH_NAME =~ ".*main" || env.BRANCH_NAME =~  ".*develop") {
-            stage("CD"){
-                node {
-                    sh "echo 'DESPLIEGUE'"
+        stage("Paso 2: Testear"){
+            steps {
+                script {
+                env.STAGE='Paso 2: Testear'
+                sh "echo 'Test Code!'"
+                // Run Maven on a Unix agent.
+                sh "./mvnw clean test -e"
                 }
             }
-            stage("Paso 1: Subir Artefacto a Nexus"){
-                    node {
-                        nexusPublisher nexusInstanceId: 'nexus',
-                            nexusRepositoryId: 'repository_grupo2',
-                            packages: [
-                                [$class: 'MavenPackage',
-                                    mavenAssetList: [
-                                        [classifier: '',
-                                        extension: 'jar',
-                                        filePath: 'build/DevOpsUsach2020-0.0.1.jar'
-                                    ]
-                                ],
-                                    mavenCoordinate: [
-                                        artifactId: 'DevOpsUsach2020',
-                                        groupId: 'com.devopsusach2020',
-                                        packaging: 'jar',
-                                        version: '0.0.1'
-                                    ]
-                                ]
-                            ]
-                    }
-                }
-                stage("Paso 2: Descargar Nexus"){
-                    node {
-                            sh ' curl -X GET -u admin:$NEXUS_PASSWORD "http://nexus:8081/repository/maven-usach-ceres/com/devopsusach2020/DevOpsUsach2020/0.0.1/DevOpsUsach2020-0.0.1.jar" -O'
-                    }
-                }
-                stage("Paso 3: Levantar Artefacto Jar en server Jenkins"){
-                    node {
-                            sh 'nohup java -jar DevOpsUsach2020-0.0.1.jar & >/dev/null'
-                    }
-                }
-                stage("Paso 4: Testear Artefacto - Dormir(Esperar 20sg) "){
-                    node {
-                            sh "sleep 20 && curl -X GET 'http://localhost:8081/rest/mscovid/test?msg=testing'"
-                    }
-                }
-                stage("Paso 5: Detener Atefacto jar en Jenkins server"){
-                    node {
-                        sh '''
-                            echo 'Process Java .jar: ' $(pidof java | awk '{print $1}')
-                            sleep 20
-                            kill -9 $(pidof java | awk '{print $1}')
-                        '''
-                    }
-                }
-                stage("Paso 2: Mensaje slack"){
-                    node {
-                        slackSend (color: 'good', channel: "${env.channel}", message: "[grupo2] [${env.JOB_NAME}] [${BUILD_NUMBER}] Despliegue Exitoso [${env.STAGE}]", teamDomain: 'devopsusach20-lzc3526', tokenCredentialId: 'token-slack')
-                    }
-                }
-
         }
-
+        stage("Paso 3: Build .Jar"){
+            steps {
+                script {
+                env.STAGE='Paso 3: Build .Jar'
+                sh "echo 'Build .Jar!'"
+                // Run Maven on a Unix agent.
+                sh "./mvnw clean package -e"
+                }
+            }
+            post {
+                //record the test results and archive the jar file.
+                success {
+                    archiveArtifacts artifacts:'build/*.jar'
+                }
+            }
+        }
+        stage("Paso 4: Análisis SonarQube"){
+            steps {
+                script {
+                    env.STAGE='Paso 4: Analisis SonarQube'
+                }
+                withSonarQubeEnv('sonarqube') {
+                    sh "echo 'Calling sonar Service in another docker container!'"
+                    // Run Maven on a Unix agent to execute Sonar.
+                    sh './mvnw clean verify sonar:sonar -Dsonar.projectKey=custom-project-key'
+                }
+            }
+        }
+        stage("Paso 5: Run Jar"){
+            steps {
+                script {
+                    echo "corriendo..."
+                     sh "nohup bash ./mvnw spring-boot:run  & >/dev/null"
+                    sh "sleep 20 && curl -X GET 'http://localhost:8081/rest/mscovid/test?msg=testing'"
+                }
+            }
+        }        
+        stage("Paso 6: Test newman"){
+            steps {
+                script {
+                    echo "ejecutando test..."
+                   sh "newman run ./ejemplo-maven.postman_collection.json"
+                }
+            }
+        }        
+        stage('Paso 7: Reportar en Slack') {
+            steps {
+                script{
+                   env.STAGE='Paso 6: Reportar en Slack'
+                   sh 'echo "Testins stage && Slack"'
+                }
+            }
+        }
     }
-
-    catch (e) {
-            echo 'This will run only if failed'
-            slackSend (color: 'danger', channel: "${env.channel}", message: "[grupo2] [${env.JOB_NAME}] [${BUILD_NUMBER}] Ejecucion fallida en stage [${env.STAGE}]", teamDomain: 'devopsusach20-lzc3526', tokenCredentialId: 'token-slack')
-            throw e
+    post {
+        always {
+            sh "echo 'fase always executed post'"
+        }
+		success{
+            slackSend color: 'good', channel: "${env.channel}", message: "[ldominguez] [${JOB_NAME}] [${BUILD_TAG}] Ejecucion Exitosa", teamDomain: 'devopsusach20-lzc3526', tokenCredentialId: 'token-slack'
+        }
+        failure{
+            slackSend color: 'danger', channel: "${env.channel}", message: "[ldominguez] [${env.JOB_NAME}] [${BUILD_TAG}] Ejecucion fallida en stage [${env.STAGE}]", teamDomain: 'devopsusach20-lzc3526', tokenCredentialId: 'token-slack'
+        }
     }
 }
