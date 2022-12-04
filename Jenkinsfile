@@ -1,34 +1,85 @@
 import groovy.json.JsonSlurperClassic
+
 def jsonParse(def json) {
     new groovy.json.JsonSlurperClassic().parseText(json)
 }
 pipeline {
     agent any
+    environment {
+        channel='D0457H2086Q'
+        NEXUS_PASSWORD=credentials('nexus-password')
+    }
     stages {
-        stage("Paso 1: Saludar"){
+        stage("Paso 1: Compilar"){
             steps {
                 script {
-                sh "echo 'Hello, World Usach!'"
+                env.STAGE='Paso 1: Compilar'
+                sh "echo 'Compile Code!'"
+                // Run Maven on a Unix agent.
+                sh "./mvnw clean compile -e"
                 }
             }
         }
-        stage("Paso 2: Crear Archivo"){
+        stage("Paso 2: Testear"){
             steps {
                 script {
-                sh "echo 'Hello, World Usach!!' > hello-devops-usach-.txt"
+                env.STAGE='Paso 2: Testear'
+                sh "echo 'Test Code!'"
+                // Run Maven on a Unix agent.
+                sh "./mvnw clean test -e"
                 }
             }
         }
-        stage("Paso 3: Guardar Archivo"){
+        stage("Paso 3: Build .Jar"){
             steps {
                 script {
-                sh "echo 'Persisitir Archivo!'"
+                env.STAGE='Paso 3: Build .Jar'
+                sh "echo 'Build .Jar!'"
+                // Run Maven on a Unix agent.
+                sh "./mvnw clean package -e"
                 }
             }
             post {
                 //record the test results and archive the jar file.
                 success {
-                    archiveArtifacts(artifacts:'**/*.txt', followSymlinks:false)
+                    archiveArtifacts artifacts:'build/*.jar'
+                }
+            }
+        }
+        stage("Paso 4: Análisis SonarQube"){
+            steps {
+                script {
+                    env.STAGE='Paso 4: Analisis SonarQube'
+                }
+                withSonarQubeEnv('sonarqube') {
+                    sh "echo 'Calling sonar Service in another docker container!'"
+                    // Run Maven on a Unix agent to execute Sonar.
+                    sh './mvnw clean verify sonar:sonar -Dsonar.projectKey=custom-project-key'
+                }
+            }
+        }
+        stage("Paso 5: Run Jar"){
+            steps {
+                script {
+                    echo "corriendo..."
+                     sh "nohup bash ./mvnw spring-boot:run  & >/dev/null"
+                    sh "sleep 20 && curl -X GET 'http://localhost:8081/rest/mscovid/test?msg=testing'"
+                }
+            }
+        }
+        stage("Paso 6: Test newman"){
+            steps {
+                script {
+                    echo "ejecutando test..."
+                   sh "newman run ./ejemplo-maven.postman_collection.json"
+                }
+            }
+        }
+        stage('Paso 7: Reportar en Slack') {
+            steps {
+                script{
+                   env.STAGE='Paso 6: Reportar en Slack'
+                   sh 'echo "Testins stage && Slack"'
                 }
             }
         }
@@ -37,11 +88,11 @@ pipeline {
         always {
             sh "echo 'fase always executed post'"
         }
-        success {
-            sh "echo 'fase success'"
+		success{
+            slackSend color: 'good', channel: "${env.channel}", message: "[ldominguez] [${JOB_NAME}] [${BUILD_TAG}] Ejecucion Exitosa", teamDomain: 'devopsusach20-lzc3526', tokenCredentialId: 'token-slack'
         }
-        failure {
-            sh "echo 'fase failure'"
+        failure{
+            slackSend color: 'danger', channel: "${env.channel}", message: "[ldominguez] [${env.JOB_NAME}] [${BUILD_TAG}] Ejecucion fallida en stage [${env.STAGE}]", teamDomain: 'devopsusach20-lzc3526', tokenCredentialId: 'token-slack'
         }
     }
 }
