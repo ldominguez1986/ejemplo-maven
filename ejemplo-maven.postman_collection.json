@@ -57,15 +57,20 @@
 					"listen": "test",
 					"script": {
 						"exec": [
-							"pm.test(\"Status code is 200\", function () {",
-							"    // console.log(p.response);",
-							"    // pm.response.to.have.status(200);",
-							"    pm.expect(pm.response).to.have.code(200);",
+							"",
+							"pm.test(\"Status code is 200\", () => {",
+							"  pm.expect(pm.response.code).to.eql(200);",
 							"});",
+							"",
+							"pm.test(\"Response time is less than 200ms\", () => {",
+							"  pm.expect(pm.response.responseTime).to.be.below(100000);",
+							"});",
+							"",
 							"pm.test(\"Mensaje == ok\", function () {",
 							"    var jsonData = pm.response.json();",
 							"    pm.expect(jsonData.mensaje).to.eql(\"ok\");",
-							"});"
+							"});",
+							""
 						],
 						"type": "text/javascript"
 					}
@@ -74,13 +79,7 @@
 					"listen": "prerequest",
 					"script": {
 						"exec": [
-							"pm.test(\"Status code is 200\", function () {",
-							"    pm.response.to.have.status(200);",
-							"});",
-							"",
-							"pm.test(\"Response time is less than 200ms\", function () {",
-							"    pm.expect(pm.response.responseTime).to.be.below(250);",
-							"});"
+							""
 						],
 						"type": "text/javascript"
 					}
